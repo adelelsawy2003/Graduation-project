@@ -2,9 +2,9 @@
 
 Graduation Project — Mechatronics, Robotics & Automation Engineering, Tanta University.
 
-A mobile robot that detects a colored target with an onboard camera and points a laser at it by driving a 2-DOF pan/tilt stage on a robotic arm through closed-loop visual servoing. The platform also carries gas and magnetic sensors for environment monitoring, and is built around a 4-wheel mecanum base for omnidirectional movement.
+A mobile robot that detects a colored target with an onboard camera and points a laser at it by driving a 4-DOF robotic arm through closed-loop visual servoing. The current firmware actively drives 2 of the 4 axes (pan/tilt), holding the other two at a fixed neutral pose. The platform also carries gas and magnetic sensors for environment monitoring, and is built around a 4-wheel mecanum base for omnidirectional movement.
 
-![Full assembly — mobile base with the pan/tilt arm mounted on top](docs/images/robot_full_assembly.jpg)
+![Full assembly — mobile base with the 4-DOF arm mounted on top](docs/images/robot_full_assembly.jpg)
 
 ## System architecture
 
@@ -13,7 +13,7 @@ The system runs on three independent controllers:
 | Module | Hardware | Role |
 | --- | --- | --- |
 | `raspberry_pi/` | Raspberry Pi 4 + IMX219 camera | Runs YOLO11n on NCNN, detects and verifies the target, computes the pixel error vector and streams it over UART |
-| `robot_arm/` | Arduino + 2× active servo (pan/tilt) + laser module | Receives the pixel error vector over serial, converts it into pan/tilt corrections, moves the servos gradually, drives the laser, and falls back to a safe pose on signal loss |
+| `robot_arm/` | Arduino + 4-DOF servo arm (2 actively driven for pan/tilt) + laser module | Receives the pixel error vector over serial, converts it into pan/tilt corrections, moves the servos gradually, drives the laser, and falls back to a safe pose on signal loss |
 | `mobile_base/` | Arduino Mega + 4× DC motors (mecanum) | Bluetooth-driven mecanum platform with gas sensor, magnetic sensor, buzzer and LED alarms |
 
 Data flow: camera → Raspberry Pi (detection, HSV verification, pixel error vector) → serial → arm controller (pixel error → pan/tilt correction → servos + laser).
@@ -77,7 +77,7 @@ Mecanum drive with six motion primitives — forward, backward, strafe left/righ
 ├── raspberry_pi/
 │   └── target_detection.py     # Vision pipeline and serial transmission
 ├── robot_arm/
-│   └── robot_arm.ino           # Pan/tilt servo arm + laser + watchdog
+│   └── robot_arm.ino           # 4-DOF servo arm (pan/tilt driven) + laser + watchdog
 └── mobile_base/
     └── mobile_base.ino         # Mecanum drive + sensor alarms
 ```
