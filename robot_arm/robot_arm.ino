@@ -18,6 +18,12 @@ const unsigned long SERVO_STEP_INTERVAL = 80;
 const int SERVO_STEP_SIZE = 1;  // درجة واحدة كل خطوة
 unsigned long last_servo_step_time = 0;
 
+// --- إعدادات تصحيح الخطأ البصري (Visual Servoing) ---
+// الراسبيري باي بيبعت قيمتين بس: error_x, error_y (فرق البكسل بين مركز الهدف ومنتصف الكاميرا)
+// مش 4 زوايا مفاصل، فالذراع بيتحرك في اتجاهين بس: يمين/شمال (Pan) وفوق/تحت (Tilt)
+const int PIXEL_DEADBAND = 15;           // منطقة أمان بالبكسل عشان نمنع اهتزاز السيرفو (زي ما مذكور في تقرير المشروع)
+const float ERROR_TO_DEGREE_DIVISOR = 4.0;  // معامل تحويل بكسل->درجة، يحتاج ضبط عملي على الهاردوير الحقيقي
+
 // الزوايا الحالية الفعلية للموتورات
 int current_M1 = 90;
 int current_M2 = 90;
@@ -56,26 +62,36 @@ void loop() {
   // استقبال بيانات الراسبيري
   if (Serial.available() > 0) {
     String data_stream = Serial.readStringUntil('\n');
+    data_stream.trim();
 
-    float t1 = parser_float(data_stream, ',', 0);
-    float t2 = parser_float(data_stream, ',', 1);
-    float t3 = parser_float(data_stream, ',', 2);
-    float t4 = parser_float(data_stream, ',', 3);
+    if (data_stream.startsWith("STOP")) {
+      // الهدف اتفقد: نطفي الليزر بس، ونسيب الذراع في مكانها الحالي (من غير رجوع مفاجئ للنص)
+      digitalWrite(LASER_PIN, LOW);
+      last_data_time = millis();
+    } else {
+      // error_x: فرق البكسل الأفقي (يمين/شمال) -- error_y: فرق البكسل الرأسي (فوق/تحت)
+      float error_x = parser_float(data_stream, ',', 0);
+      float error_y = parser_float(data_stream, ',', 1);
 
-    last_data_time = millis();
-    digitalWrite(LASER_PIN, HIGH);
+      last_data_time = millis();
+      digitalWrite(LASER_PIN, HIGH);
 
-    // تحويل زوايا الراسبيري إلى زوايا فعلية للسيرفو
-    target_M1 = constrain(90 - int(t1), 0, 180);      // القاعدة
-    target_M2 = constrain(int(t2), 0, 180);           // الكتف
-    target_M3 = constrain(90 - int(t3), 0, 180);      // الكوع
-    target_M4 = constrain(97 - int(t4) - 7, 0, 180);  // المعصم
+      // Pan (يمين/شمال) عن طريق سيرفو القاعدة M1
+      if (abs(error_x) > PIXEL_DEADBAND) {
+        target_M1 = constrain(target_M1 - (int)(error_x / ERROR_TO_DEGREE_DIVISOR), 0, 180);
+      }
+      // Tilt (فوق/تحت) عن طريق سيرفو الكتف M2
+      if (abs(error_y) > PIXEL_DEADBAND) {
+        target_M2 = constrain(target_M2 + (int)(error_y / ERROR_TO_DEGREE_DIVISOR), 0, 180);
+      }
+      // الكوع والمعصم (M3, M4) مفيش ليهم إحداثيات مبعوتة من الراسبيري، فبيفضلوا ثابتين على وضع محايد
+    }
   }
 
   // نظام الحماية لو البيانات وقفت
   if (millis() - last_data_time > TIMEOUT_LIMIT) {
-    target_M1 = 90;
-    target_M2 = 90;
+    target_M1 = current_M1;  // فضل في مكانك، متطلعش فجأة للنص
+    target_M2 = current_M2;
     target_M3 = 90;
     target_M4 = 97;
     digitalWrite(LASER_PIN, LOW);
